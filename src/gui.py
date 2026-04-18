@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Any
@@ -12,8 +13,8 @@ from .game import KlondikeGame
 class KlondikeApp:
     """Render and control a visual Klondike board."""
 
-    CARD_WIDTH = 96
-    CARD_HEIGHT = 132
+    CARD_WIDTH = 72
+    CARD_HEIGHT = 100
     TOP_Y = 18
     TABLEAU_Y = 190
     COL_GAP = 24
@@ -38,6 +39,10 @@ class KlondikeApp:
         self.hotspots: list[dict[str, Any]] = []
         self.selected: dict[str, Any] | None = None
         self.suit_order = ["S", "H", "D", "C"]
+        self.texture_dir = self._resolve_texture_dir()
+        self.card_textures: dict[str, tk.PhotoImage] = {}
+        self._load_card_textures()
+        self.back_texture = self._create_back_texture()
         self.column_left = [
             20 + index * (self.CARD_WIDTH + self.COL_GAP)
             for index in range(7)
@@ -116,6 +121,65 @@ class KlondikeApp:
         """Show one status message under toolbar."""
         self.status_var.set(text)
 
+    def _resolve_texture_dir(self) -> Path:
+        """Return the texture directory path relative to project root."""
+        return Path(__file__).resolve().parent.parent / "png"
+
+    def _load_card_textures(self) -> None:
+        """Load card face textures from the png directory when available."""
+        if not self.texture_dir.exists():
+            return
+
+        loaded_keys: list[str] = []
+        for image_path in sorted(self.texture_dir.glob("*.png")):
+            key = image_path.stem.upper()
+            try:
+                original_texture = tk.PhotoImage(file=str(image_path))
+            except tk.TclError:
+                continue
+
+            scale_x = max(1, (original_texture.width() + self.CARD_WIDTH - 1) // self.CARD_WIDTH)
+            scale_y = max(1, (original_texture.height() + self.CARD_HEIGHT - 1) // self.CARD_HEIGHT)
+            scale = max(scale_x, scale_y)
+            texture = original_texture.subsample(scale, scale)
+
+            self.card_textures[key] = texture
+            loaded_keys.append(key)
+
+        if loaded_keys:
+            first_texture = self.card_textures[loaded_keys[0]]
+            self.CARD_WIDTH = first_texture.width()
+            self.CARD_HEIGHT = first_texture.height()
+
+    def _create_back_texture(self) -> tk.PhotoImage:
+        """Create a generated card-back texture for hidden cards."""
+        image = tk.PhotoImage(width=self.CARD_WIDTH, height=self.CARD_HEIGHT)
+        image.put("#1b4f91", to=(0, 0, self.CARD_WIDTH, self.CARD_HEIGHT))
+
+        border = 4
+        image.put(
+            "#f0f6ff",
+            to=(border, border, self.CARD_WIDTH - border, self.CARD_HEIGHT - border),
+        )
+        image.put(
+            "#2a67b6",
+            to=(border + 3, border + 3, self.CARD_WIDTH - border - 3, self.CARD_HEIGHT - border - 3),
+        )
+
+        stripe_step = 8
+        for x_pos in range(border + 5, self.CARD_WIDTH - border - 3, stripe_step):
+            image.put("#99c4ff", to=(x_pos, border + 5, x_pos + 2, self.CARD_HEIGHT - border - 3))
+        return image
+
+    def _rank_to_texture(self, rank: int) -> str:
+        """Convert numeric rank to file naming token."""
+        rank_map = {1: "A", 11: "J", 12: "Q", 13: "K"}
+        return rank_map.get(rank, str(rank))
+
+    def _card_texture_key(self, card: Any) -> str:
+        """Build one texture key like SA or D10 for a card object."""
+        return f"{card.suit}{self._rank_to_texture(card.rank)}"
+
     def _suit_color(self, suit: str) -> str:
         """Return text color for one suit."""
         return "#b10000" if suit in {"H", "D"} else "#111111"
@@ -153,36 +217,55 @@ class KlondikeApp:
         self,
         left: int,
         top: int,
-        text: str,
-        text_color: str,
+        card: Any | None,
         is_back: bool,
         is_selected: bool,
     ) -> None:
-        """Draw one card rectangle at the specified position."""
+        """Draw one card using texture when available with fallback style."""
         right = left + self.CARD_WIDTH
         bottom = top + self.CARD_HEIGHT
-        fill = "#2b579a" if is_back else "#fefefe"
-        outline = "#ffd84d" if is_selected else "#1d1d1d"
-        width = 3 if is_selected else 2
-        self.canvas.create_rectangle(left, top, right, bottom, fill=fill, outline=outline, width=width)
+
+        texture = None
         if is_back:
-            self.canvas.create_text(
-                left + self.CARD_WIDTH // 2,
-                top + self.CARD_HEIGHT // 2,
-                text="KL",
-                fill="#ffffff",
-                font=("Consolas", 16, "bold"),
-            )
-            return
-        self.canvas.create_text(left + 12, top + 12, anchor=tk.NW, text=text, fill=text_color, font=("Consolas", 12, "bold"))
-        self.canvas.create_text(
-            left + self.CARD_WIDTH - 12,
-            top + self.CARD_HEIGHT - 12,
-            anchor=tk.SE,
-            text=text,
-            fill=text_color,
-            font=("Consolas", 12, "bold"),
-        )
+            texture = self.back_texture
+        elif card is not None:
+            texture = self.card_textures.get(self._card_texture_key(card))
+
+        if texture is not None:
+            self.canvas.create_image(left, top, image=texture, anchor=tk.NW)
+        else:
+            fill = "#2b579a" if is_back else "#fefefe"
+            self.canvas.create_rectangle(left, top, right, bottom, fill=fill, outline="#1d1d1d", width=2)
+            if is_back:
+                self.canvas.create_text(
+                    left + self.CARD_WIDTH // 2,
+                    top + self.CARD_HEIGHT // 2,
+                    text="KL",
+                    fill="#ffffff",
+                    font=("Consolas", 16, "bold"),
+                )
+            elif card is not None:
+                text = self._card_text(card)
+                text_color = self._suit_color(card.suit)
+                self.canvas.create_text(
+                    left + 12,
+                    top + 12,
+                    anchor=tk.NW,
+                    text=text,
+                    fill=text_color,
+                    font=("Consolas", 12, "bold"),
+                )
+                self.canvas.create_text(
+                    left + self.CARD_WIDTH - 12,
+                    top + self.CARD_HEIGHT - 12,
+                    anchor=tk.SE,
+                    text=text,
+                    fill=text_color,
+                    font=("Consolas", 12, "bold"),
+                )
+
+        if is_selected:
+            self.canvas.create_rectangle(left, top, right, bottom, outline="#ffd84d", width=3)
 
     def _draw_placeholder(self, left: int, top: int, label: str) -> None:
         """Draw an empty pile placeholder with label."""
@@ -358,8 +441,7 @@ class KlondikeApp:
             self._draw_card(
                 left=self.stock_left,
                 top=self.TOP_Y,
-                text="",
-                text_color="#ffffff",
+                card=None,
                 is_back=True,
                 is_selected=False,
             )
@@ -383,8 +465,7 @@ class KlondikeApp:
             self._draw_card(
                 left=self.waste_left,
                 top=self.TOP_Y,
-                text=self._card_text(card),
-                text_color=self._suit_color(card.suit),
+                card=card,
                 is_back=False,
                 is_selected=waste_selected,
             )
@@ -412,8 +493,7 @@ class KlondikeApp:
                 self._draw_card(
                     left=left,
                     top=self.TOP_Y,
-                    text=self._card_text(card),
-                    text_color=self._suit_color(card.suit),
+                    card=card,
                     is_back=False,
                     is_selected=selected,
                 )
@@ -442,8 +522,7 @@ class KlondikeApp:
                 self._draw_card(
                     left=left,
                     top=top,
-                    text="",
-                    text_color="#ffffff",
+                    card=None,
                     is_back=True,
                     is_selected=False,
                 )
@@ -465,8 +544,7 @@ class KlondikeApp:
                 self._draw_card(
                     left=left,
                     top=top,
-                    text=self._card_text(card),
-                    text_color=self._suit_color(card.suit),
+                    card=card,
                     is_back=False,
                     is_selected=is_selected,
                 )
