@@ -1,0 +1,7 @@
+name: klondike-conda
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - tk
+  - pip
