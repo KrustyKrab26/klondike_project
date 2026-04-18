@@ -49,14 +49,12 @@ python main.py
 ## 5. Cách thao tác trên giao diện mới
 
 - Click vào Stock để rút 1 lá sang Waste (khi hết Stock sẽ tự quay Waste về Stock).
-- Click vào lá nguồn (Waste, Foundation, hoặc 1 lá ngửa trong Tableau) để chọn.
-- Click vào đích (Foundation hoặc cột Tableau) để thực hiện nước đi.
+- Kéo-thả trực tiếp để di chuyển bài: giữ chuột ở lá nguồn rồi kéo sang lá/cột đích.
 - Click lại đúng lá nguồn đang chọn để bỏ chọn.
 - Dùng Undo/Redo để hoàn tác hoặc làm lại.
 
 ## 6. Lưu ý
 - Nếu cần xóa môi trường:
-
 ```powershell
 conda remove -n klondike-conda --all -y
 ```
