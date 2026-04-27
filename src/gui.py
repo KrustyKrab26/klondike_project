@@ -17,6 +17,7 @@ class KlondikeApp:
     CARD_HEIGHT = 124
     TOP_Y = 18
     TABLEAU_Y = 190
+    TOP_TO_TABLEAU_GAP = 48
     COL_GAP = 28
     DOWN_STEP = 18
     UP_STEP = 30
@@ -28,6 +29,7 @@ class KlondikeApp:
         self.root.title("Klondike Solitaire - Python")
         self.root.geometry("1060x860")
         self.root.minsize(1000, 780)
+        self.fullscreen_enabled = False
         self.game = KlondikeGame()
 
         self.player_var = tk.StringVar(value="Player")
@@ -36,6 +38,7 @@ class KlondikeApp:
         self.moves_var = tk.StringVar(value="Moves: 0")
         self.time_var = tk.StringVar(value="Time: 0s")
         self.selection_var = tk.StringVar(value="Selected: none")
+        self.ranking_visible = True
 
         self.hotspots: list[dict[str, Any]] = []
         self.selected: dict[str, Any] | None = None
@@ -52,12 +55,19 @@ class KlondikeApp:
         self._load_card_textures()
         self.back_texture = self._create_back_texture()
 
+        self.rank_container: ttk.Frame | None = None
+        self.rank_tree_holder: ttk.Frame | None = None
+        self.ranking_scrollbar: ttk.Scrollbar | None = None
+
         self.column_left = [0 for _ in range(7)]
         self.stock_left = 0
         self.waste_left = 0
         self.foundation_left = [0 for _ in range(4)]
+        self.top_row_y = self.TOP_Y
+        self.tableau_row_y = self.TABLEAU_Y
 
         self._build_widgets()
+        self.root.bind("<F11>", self.toggle_fullscreen)
         self.refresh_board()
         self._tick_clock()
 
@@ -74,6 +84,8 @@ class KlondikeApp:
         ttk.Button(top_bar, text="Undo", command=self.undo_move).pack(side=tk.LEFT, padx=3)
         ttk.Button(top_bar, text="Redo", command=self.redo_move).pack(side=tk.LEFT, padx=3)
         ttk.Button(top_bar, text="Save Result", command=self.save_result).pack(side=tk.LEFT, padx=3)
+        ttk.Button(top_bar, text="Toggle Ranking", command=self.toggle_ranking).pack(side=tk.LEFT, padx=3)
+        ttk.Label(top_bar, text="F11: Fullscreen").pack(side=tk.RIGHT, padx=(10, 0))
 
         status_bar = ttk.Frame(container)
         status_bar.pack(fill=tk.X, pady=(8, 8))
@@ -87,7 +99,7 @@ class KlondikeApp:
         ttk.Label(message_bar, textvariable=self.status_var, foreground="#004f7a").pack(side=tk.LEFT)
 
         self.canvas = tk.Canvas(container, bg="#0f6d3b", highlightthickness=0, height=540)
-        self.canvas.pack(fill=tk.BOTH, expand=False)
+        self.canvas.pack(fill=tk.BOTH, expand=True)
         self.canvas.bind("<ButtonPress-1>", self.on_canvas_press)
         self.canvas.bind("<B1-Motion>", self.on_canvas_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_canvas_release)
@@ -98,33 +110,121 @@ class KlondikeApp:
             text="How to play: Click Stock to draw. Drag a card/pile and drop exactly on a target slot.",
         ).pack(fill=tk.X, pady=(8, 4))
 
-        rank_frame = ttk.LabelFrame(container, text="Ranking", padding=8)
-        rank_frame.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
+        self.rank_container = ttk.LabelFrame(container, text="Ranking", padding=8)
+        self.rank_container.pack(fill=tk.BOTH, expand=False, pady=(8, 0))
+        self.rank_tree_holder = ttk.Frame(self.rank_container)
+        self.rank_tree_holder.pack(fill=tk.BOTH, expand=True)
+
+        style = ttk.Style(self.root)
+        style.configure("Ranking.Treeview", font=("Segoe UI", 10), rowheight=28)
+        style.configure("Ranking.Treeview.Heading", font=("Segoe UI", 10, "bold"))
+
         columns_def = ("player", "score", "moves", "won", "elapsed")
-        self.ranking_table = ttk.Treeview(rank_frame, columns=columns_def, show="headings", height=8)
+        self.ranking_table = ttk.Treeview(
+            self.rank_tree_holder,
+            columns=columns_def,
+            show="headings",
+            height=11,
+            style="Ranking.Treeview",
+        )
         self.ranking_table.heading("player", text="Player")
         self.ranking_table.heading("score", text="Score")
         self.ranking_table.heading("moves", text="Moves")
         self.ranking_table.heading("won", text="Won")
         self.ranking_table.heading("elapsed", text="Seconds")
-        self.ranking_table.column("player", width=220)
-        self.ranking_table.column("score", width=100)
-        self.ranking_table.column("moves", width=100)
-        self.ranking_table.column("won", width=80)
-        self.ranking_table.column("elapsed", width=120)
-        self.ranking_table.pack(fill=tk.BOTH, expand=True)
+        self.ranking_scrollbar = ttk.Scrollbar(self.rank_tree_holder, orient=tk.VERTICAL, command=self.ranking_table.yview)
+        self.ranking_table.configure(yscrollcommand=self.ranking_scrollbar.set)
+        self.ranking_table.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.ranking_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.ranking_table.bind("<Configure>", self._on_ranking_resize)
+        self._update_ranking_columns()
         self.refresh_ranking_table(self.game.ranking_board.load_entries())
+
+    def toggle_fullscreen(self, _event: tk.Event[Any] | None = None) -> None:
+        """Toggle fullscreen mode while keeping layout responsive."""
+        self.fullscreen_enabled = not self.fullscreen_enabled
+        self.root.attributes("-fullscreen", self.fullscreen_enabled)
+        self.refresh_board()
+
+    def toggle_ranking(self) -> None:
+        """Show or hide ranking panel to prioritize board space."""
+        if self.rank_container is None:
+            return
+        if self.ranking_visible:
+            self.rank_container.pack_forget()
+            self.ranking_visible = False
+            self._set_status("Ranking hidden")
+        else:
+            self.rank_container.pack(fill=tk.BOTH, expand=False, pady=(8, 0))
+            self.ranking_visible = True
+            self._set_status("Ranking shown")
+            self._update_ranking_columns()
+        self.refresh_board()
+
+    def _on_ranking_resize(self, _event: tk.Event[Any]) -> None:
+        """Recompute ranking column widths when table area is resized."""
+        self._update_ranking_columns()
+
+    def _update_ranking_columns(self) -> None:
+        """Resize ranking columns proportionally for better readability."""
+        table_width = max(self.ranking_table.winfo_width(), 680)
+        widths = {
+            "player": int(table_width * 0.33),
+            "score": int(table_width * 0.16),
+            "moves": int(table_width * 0.16),
+            "won": int(table_width * 0.15),
+            "elapsed": int(table_width * 0.20),
+        }
+        min_widths = {
+            "player": 220,
+            "score": 110,
+            "moves": 110,
+            "won": 100,
+            "elapsed": 120,
+        }
+        for column_name, width in widths.items():
+            self.ranking_table.column(column_name, width=max(width, min_widths[column_name]), anchor=tk.CENTER)
+
+        self.ranking_table.column("player", anchor=tk.W)
 
     def _set_status(self, text: str) -> None:
         """Set one short message in the status bar."""
         self.status_var.set(text)
 
     def _recalculate_layout(self) -> None:
-        """Recompute centered x positions based on current canvas width."""
+        """Recompute centered x/y positions based on current canvas size."""
         canvas_width = max(int(self.canvas.winfo_width()), 960)
+        canvas_height = max(int(self.canvas.winfo_height()), 500)
         usable_width = max(canvas_width - 2 * self.board_padding_x, self.CARD_WIDTH * 7)
         dynamic_gap = (usable_width - self.CARD_WIDTH * 7) // 6
         self.COL_GAP = max(14, min(40, dynamic_gap))
+
+        gap_between_rows = self.TOP_TO_TABLEAU_GAP
+        if self.ranking_visible:
+            self.top_row_y = self.TOP_Y
+        else:
+            estimated_tableau_height = self.CARD_HEIGHT
+            for column in self.game.tableau:
+                hidden_count = column.face_down.size()
+                visible_count = len(column.visible_cards())
+                stack_height = (
+                    hidden_count * self.DOWN_STEP
+                    + self.CARD_HEIGHT
+                    + max(0, visible_count - 1) * self.UP_STEP
+                )
+                estimated_tableau_height = max(estimated_tableau_height, stack_height)
+
+            content_height = self.CARD_HEIGHT + gap_between_rows + estimated_tableau_height
+            centered_top = max(14, (canvas_height - content_height) // 2)
+            self.top_row_y = centered_top
+
+        self.tableau_row_y = self.top_row_y + self.CARD_HEIGHT + gap_between_rows
+
+        remaining_height = max(120, canvas_height - self.tableau_row_y - self.CARD_HEIGHT - 20)
+        max_up_step = max(24, remaining_height // 12)
+        self.UP_STEP = max(24, min(self.CARD_HEIGHT // 3, max_up_step))
+        self.DOWN_STEP = max(14, min(self.CARD_HEIGHT // 6, self.UP_STEP // 2))
+
         total_board_width = self.CARD_WIDTH * 7 + self.COL_GAP * 6
         start_x = max((canvas_width - total_board_width) // 2, self.board_padding_x)
 
@@ -538,16 +638,16 @@ class KlondikeApp:
                 "type": "stock",
                 "bbox": (
                     self.stock_left,
-                    self.TOP_Y,
+                    self.top_row_y,
                     self.stock_left + self.CARD_WIDTH,
-                    self.TOP_Y + self.CARD_HEIGHT,
+                    self.top_row_y + self.CARD_HEIGHT,
                 ),
             }
         )
         if self.game.stock.is_empty():
-            self._draw_placeholder(self.stock_left, self.TOP_Y, "STOCK")
+            self._draw_placeholder(self.stock_left, self.top_row_y, "STOCK")
         else:
-            self._draw_card(self.stock_left, self.TOP_Y, None, is_back=True, is_selected=False)
+            self._draw_card(self.stock_left, self.top_row_y, None, is_back=True, is_selected=False)
 
         waste_selected = self.selected is not None and self.selected.get("type") == "waste"
         self.hotspots.append(
@@ -555,23 +655,23 @@ class KlondikeApp:
                 "type": "waste",
                 "bbox": (
                     self.waste_left,
-                    self.TOP_Y,
+                    self.top_row_y,
                     self.waste_left + self.CARD_WIDTH,
-                    self.TOP_Y + self.CARD_HEIGHT,
+                    self.top_row_y + self.CARD_HEIGHT,
                 ),
             }
         )
         if self.game.waste.is_empty():
-            self._draw_placeholder(self.waste_left, self.TOP_Y, "WASTE")
+            self._draw_placeholder(self.waste_left, self.top_row_y, "WASTE")
         else:
-            self._draw_card(self.waste_left, self.TOP_Y, self.game.waste.peek(), is_back=False, is_selected=waste_selected)
+            self._draw_card(self.waste_left, self.top_row_y, self.game.waste.peek(), is_back=False, is_selected=waste_selected)
 
         for index, suit in enumerate(self.suit_order):
             left = self.foundation_left[index]
             selected = self.selected is not None and self.selected.get("type") == "foundation" and self.selected.get("suit") == suit
             self.canvas.create_text(
                 left + self.CARD_WIDTH // 2,
-                self.TOP_Y - 8,
+                self.top_row_y - 8,
                 text=f"F-{suit}",
                 fill="#e8fff3",
                 font=("Consolas", 10, "bold"),
@@ -580,14 +680,14 @@ class KlondikeApp:
                 {
                     "type": "foundation",
                     "suit": suit,
-                    "bbox": (left, self.TOP_Y, left + self.CARD_WIDTH, self.TOP_Y + self.CARD_HEIGHT),
+                    "bbox": (left, self.top_row_y, left + self.CARD_WIDTH, self.top_row_y + self.CARD_HEIGHT),
                 }
             )
             foundation = self.game.foundations[suit]
             if foundation.is_empty():
-                self._draw_placeholder(left, self.TOP_Y, f"F-{suit}")
+                self._draw_placeholder(left, self.top_row_y, f"F-{suit}")
             else:
-                self._draw_card(left, self.TOP_Y, foundation.peek(), is_back=False, is_selected=selected)
+                self._draw_card(left, self.top_row_y, foundation.peek(), is_back=False, is_selected=selected)
 
     def _draw_tableau(self) -> None:
         """Draw all tableau columns with hidden and visible card stacks."""
@@ -603,16 +703,16 @@ class KlondikeApp:
                     "column": column_index,
                     "bbox": (
                         left,
-                        self.TABLEAU_Y,
+                        self.tableau_row_y,
                         left + self.CARD_WIDTH,
-                        self.TABLEAU_Y + self.CARD_HEIGHT + self.UP_STEP * max(len(visible_cards), 1),
+                        self.tableau_row_y + self.CARD_HEIGHT + self.UP_STEP * max(len(visible_cards), 1),
                     ),
                 }
             )
 
             self.canvas.create_text(
                 left,
-                self.TABLEAU_Y - 20,
+                self.tableau_row_y - 20,
                 anchor=tk.NW,
                 text=f"T{column_index + 1}",
                 fill="#e8fff3",
@@ -621,12 +721,12 @@ class KlondikeApp:
 
             down_count = len(hidden_cards)
             for down_index in range(down_count):
-                top = self.TABLEAU_Y + down_index * self.DOWN_STEP
+                top = self.tableau_row_y + down_index * self.DOWN_STEP
                 self._draw_card(left, top, None, is_back=True, is_selected=False)
 
-            up_start = self.TABLEAU_Y + down_count * self.DOWN_STEP
+            up_start = self.tableau_row_y + down_count * self.DOWN_STEP
             if not visible_cards and down_count == 0:
-                self._draw_placeholder(left, self.TABLEAU_Y, "TABLEAU")
+                self._draw_placeholder(left, self.tableau_row_y, "TABLEAU")
 
             for visible_index, card in enumerate(visible_cards):
                 top = up_start + visible_index * self.UP_STEP
@@ -680,6 +780,12 @@ class KlondikeApp:
                     entry.get("elapsed_seconds", 0),
                 ),
             )
+
+        visible_rows = 11
+        if len(ordered) < visible_rows:
+            visible_rows = max(6, len(ordered))
+        self.ranking_table.configure(height=visible_rows)
+        self._update_ranking_columns()
 
     def start_new_game(self) -> None:
         """Start a fresh game and apply current player name."""

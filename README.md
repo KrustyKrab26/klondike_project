@@ -5,7 +5,7 @@ Project Klondike Solitaire được viết bằng Python với GUI Tkinter.
 ## 1. Yêu cầu
 
 - Windows
-- Miniconda (hoặc Anaconda, có lệnh `conda`)
+- Miniconda (hoặc Anaconda)
 
 ## 2. Tạo môi trường ảo bằng Conda
 
@@ -52,6 +52,8 @@ python main.py
 - Kéo-thả trực tiếp để di chuyển bài: giữ chuột ở lá nguồn rồi kéo sang lá/cột đích.
 - Click lại đúng lá nguồn đang chọn để bỏ chọn.
 - Dùng Undo/Redo để hoàn tác hoặc làm lại.
+- Nhấn `F11` để bật/tắt chế độ toàn màn hình.
+- Bấm nút `Toggle Ranking` để ẩn/hiện bảng xếp hạng và mở rộng vùng chơi khi cần.
 
 ## 6. Lưu ý
 - Nếu cần xóa môi trường:
