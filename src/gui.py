@@ -48,7 +48,6 @@ class KlondikeApp:
         self.drag_start_y = 0
         self.drag_preview_id: int | None = None
 
-        self.suit_order = ["S", "H", "D", "C"]
         self.board_padding_x = 20
         self.texture_dir = self._resolve_texture_dir()
         self.card_textures: dict[str, tk.PhotoImage] = {}
@@ -307,7 +306,7 @@ class KlondikeApp:
         if selected_type == "waste" and target_type == "waste":
             return True
         if selected_type == "foundation" and target_type == "foundation":
-            return self.selected["suit"] == target["suit"]
+            return self.selected["index"] == target["index"]
         if selected_type == "tableau" and target_type == "tableau_card":
             return self.selected["column"] == target["column"] and self.selected["start_index"] == target["start_index"]
         return False
@@ -378,10 +377,12 @@ class KlondikeApp:
         self.selected = {"type": "waste"}
         self.selection_var.set("Selected: waste")
 
-    def _select_foundation(self, suit: str) -> None:
-        """Select foundation suit as move source."""
-        self.selected = {"type": "foundation", "suit": suit}
-        self.selection_var.set(f"Selected: foundation {suit}")
+    def _select_foundation(self, foundation_index: int) -> None:
+        """Select foundation slot as move source."""
+        self.selected = {"type": "foundation", "index": foundation_index}
+        foundation = self.game.foundations[foundation_index]
+        label = foundation.peek().suit if not foundation.is_empty() else str(foundation_index + 1)
+        self.selection_var.set(f"Selected: foundation {label}")
 
     def _select_tableau(self, column: int, start_index: int) -> None:
         """Select one tableau sub-pile as source."""
@@ -395,21 +396,18 @@ class KlondikeApp:
         }
         self.selection_var.set(f"Selected: tableau {column + 1}, cards {count}")
 
-    def _foundation_target_from_click(self, suit: str) -> bool:
-        """Attempt click-based move from selected source to foundation suit."""
+    def _foundation_target_from_click(self, foundation_index: int) -> bool:
+        """Attempt click-based move from selected source to a foundation slot."""
         if self.selected is None:
             self._set_status("Choose a source card first")
             return False
         if self.selected["type"] == "waste":
-            return self.game.move_waste_to_foundation(suit)
+            return self.game.move_waste_to_foundation(foundation_index)
         if self.selected["type"] == "tableau":
             if self.selected["count"] != 1:
                 return False
             source_column = self.selected["column"]
-            top_card = self.game.tableau[source_column].top_visible()
-            if top_card is None or top_card.suit != suit:
-                return False
-            return self.game.move_tableau_to_foundation(source_column)
+            return self.game.move_tableau_to_foundation(source_column, foundation_index)
         return False
 
     def _tableau_target_from_click(self, column: int) -> bool:
@@ -420,7 +418,7 @@ class KlondikeApp:
         if self.selected["type"] == "waste":
             return self.game.move_waste_to_tableau(column)
         if self.selected["type"] == "foundation":
-            return self.game.move_foundation_to_tableau(self.selected["suit"], column)
+            return self.game.move_foundation_to_tableau(self.selected["index"], column)
         if self.selected["type"] == "tableau":
             source_column = self.selected["column"]
             count = self.selected["count"]
@@ -435,10 +433,10 @@ class KlondikeApp:
                 return None
             return {"type": "waste"}
         if kind == "foundation":
-            suit = hotspot["suit"]
-            if self.game.foundations[suit].is_empty():
+            index = hotspot["index"]
+            if self.game.foundations[index].is_empty():
                 return None
-            return {"type": "foundation", "suit": suit}
+            return {"type": "foundation", "index": index}
         if kind == "tableau_card":
             column = hotspot["column"]
             start_index = hotspot["start_index"]
@@ -458,7 +456,7 @@ class KlondikeApp:
         if source_type == "waste":
             return target_type == "waste"
         if source_type == "foundation":
-            return target_type == "foundation" and source["suit"] == hotspot.get("suit")
+            return target_type == "foundation" and source["index"] == hotspot.get("index")
         if source_type == "tableau":
             return target_type in {"tableau_card", "tableau_column"} and source["column"] == hotspot.get("column")
         return False
@@ -473,14 +471,14 @@ class KlondikeApp:
 
         if source_type == "waste":
             if target_type == "foundation":
-                return self.game.move_waste_to_foundation(hotspot["suit"])
+                return self.game.move_waste_to_foundation(hotspot["index"])
             if target_type in {"tableau_card", "tableau_column"}:
                 return self.game.move_waste_to_tableau(hotspot["column"])
             return False
 
         if source_type == "foundation":
             if target_type in {"tableau_card", "tableau_column"}:
-                return self.game.move_foundation_to_tableau(source["suit"], hotspot["column"])
+                return self.game.move_foundation_to_tableau(source["index"], hotspot["column"])
             return False
 
         if source_type == "tableau":
@@ -488,10 +486,7 @@ class KlondikeApp:
                 if source["count"] != 1:
                     return False
                 source_column = source["column"]
-                top_card = self.game.tableau[source_column].top_visible()
-                if top_card is None or top_card.suit != hotspot["suit"]:
-                    return False
-                return self.game.move_tableau_to_foundation(source_column)
+                return self.game.move_tableau_to_foundation(source_column, hotspot["index"])
             if target_type in {"tableau_card", "tableau_column"}:
                 return self.game.move_tableau_to_tableau(source["column"], hotspot["column"], source["count"])
             return False
@@ -507,7 +502,7 @@ class KlondikeApp:
             self._select_waste()
             return
         if source["type"] == "foundation":
-            self._select_foundation(source["suit"])
+            self._select_foundation(source["index"])
             return
         self._select_tableau(source["column"], source["start_index"])
 
@@ -538,15 +533,15 @@ class KlondikeApp:
             return
 
         if kind == "foundation":
-            suit = hotspot["suit"]
+            index = hotspot["index"]
             if self.selected is None:
-                if self.game.foundations[suit].is_empty():
+                if self.game.foundations[index].is_empty():
                     self._set_status("Foundation is empty")
                     return
-                self._select_foundation(suit)
+                self._select_foundation(index)
                 self.refresh_board()
                 return
-            success = self._foundation_target_from_click(suit)
+            success = self._foundation_target_from_click(index)
             self._set_status("Move success" if success else "Invalid move")
             self._clear_selection()
             self.refresh_board()
@@ -666,26 +661,27 @@ class KlondikeApp:
         else:
             self._draw_card(self.waste_left, self.top_row_y, self.game.waste.peek(), is_back=False, is_selected=waste_selected)
 
-        for index, suit in enumerate(self.suit_order):
+        for index in range(4):
             left = self.foundation_left[index]
-            selected = self.selected is not None and self.selected.get("type") == "foundation" and self.selected.get("suit") == suit
+            selected = self.selected is not None and self.selected.get("type") == "foundation" and self.selected.get("index") == index
+            foundation = self.game.foundations[index]
+            suit_label = foundation.peek().suit if not foundation.is_empty() else "?"
             self.canvas.create_text(
                 left + self.CARD_WIDTH // 2,
                 self.top_row_y - 8,
-                text=f"F-{suit}",
+                text=f"F-{suit_label}",
                 fill="#e8fff3",
                 font=("Consolas", 10, "bold"),
             )
             self.hotspots.append(
                 {
                     "type": "foundation",
-                    "suit": suit,
+                    "index": index,
                     "bbox": (left, self.top_row_y, left + self.CARD_WIDTH, self.top_row_y + self.CARD_HEIGHT),
                 }
             )
-            foundation = self.game.foundations[suit]
             if foundation.is_empty():
-                self._draw_placeholder(left, self.top_row_y, f"F-{suit}")
+                self._draw_placeholder(left, self.top_row_y, "F")
             else:
                 self._draw_card(left, self.top_row_y, foundation.peek(), is_back=False, is_selected=selected)
 

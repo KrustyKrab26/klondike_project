@@ -25,7 +25,7 @@ class KlondikeGame:
         """Initialize game state containers and immediately start a new deal."""
         self.stock: Stack[Card] = Stack()
         self.waste: Stack[Card] = Stack()
-        self.foundations: dict[str, Stack[Card]] = {suit: Stack() for suit in ["S", "H", "D", "C"]}
+        self.foundations: list[Stack[Card]] = [Stack() for _ in range(4)]
         self.tableau: list[TableauColumn] = [TableauColumn() for _ in range(7)]
         self.history = HistoryManager()
         self.ranking_board = RankingBoard(ranking_file)
@@ -39,7 +39,7 @@ class KlondikeGame:
         """Reset all piles and tableau columns to an empty board."""
         self.stock.clear()
         self.waste.clear()
-        for foundation in self.foundations.values():
+        for foundation in self.foundations:
             foundation.clear()
         self.tableau = [TableauColumn() for _ in range(7)]
 
@@ -86,13 +86,15 @@ class KlondikeGame:
                 return False
         return True
 
-    def can_place_on_foundation(self, card: Card, suit: str) -> bool:
-        """Return True when card can be legally pushed to target foundation."""
-        foundation = self.foundations[suit]
+    def can_place_on_foundation(self, card: Card, foundation_index: int) -> bool:
+        """Return True when card can be legally pushed to target foundation slot."""
+        if not (0 <= foundation_index < len(self.foundations)):
+            return False
+        foundation = self.foundations[foundation_index]
         if foundation.is_empty():
-            return card.suit == suit and card.rank == 1
+            return card.rank == 1
         top = foundation.peek()
-        return card.suit == suit and card.rank == top.rank + 1
+        return card.suit == top.suit and card.rank == top.rank + 1
 
     def _can_place_on_tableau(self, moving_bottom: Card, target_column: int) -> bool:
         """Return True when moving_bottom can be placed on target tableau column."""
@@ -141,10 +143,10 @@ class KlondikeGame:
         return {
             "stock": [card_to_dict(card) for card in self.stock.to_list()],
             "waste": [card_to_dict(card) for card in self.waste.to_list()],
-            "foundations": {
-                suit: [card_to_dict(card) for card in foundation.to_list()]
-                for suit, foundation in self.foundations.items()
-            },
+            "foundations": [
+                [card_to_dict(card) for card in foundation.to_list()]
+                for foundation in self.foundations
+            ],
             "tableau": [column.snapshot() for column in self.tableau],
             "score": self.score,
             "moves": self.moves,
@@ -156,8 +158,11 @@ class KlondikeGame:
         self.stock.load_from_list([card_from_dict(raw) for raw in state["stock"]])
         self.waste.load_from_list([card_from_dict(raw) for raw in state["waste"]])
 
-        for suit, cards in state["foundations"].items():
-            self.foundations[suit].load_from_list([card_from_dict(raw) for raw in cards])
+        foundation_rows = state.get("foundations", [])
+        if len(foundation_rows) != len(self.foundations):
+            foundation_rows = [[] for _ in range(len(self.foundations))]
+        for index, cards in enumerate(foundation_rows):
+            self.foundations[index].load_from_list([card_from_dict(raw) for raw in cards])
 
         for index, column_state in enumerate(state["tableau"]):
             self.tableau[index].restore(column_state)
@@ -186,18 +191,18 @@ class KlondikeGame:
         self._commit_move(score_delta=5)
         return True
 
-    def move_waste_to_foundation(self, suit: str) -> bool:
+    def move_waste_to_foundation(self, foundation_index: int) -> bool:
         """Move top waste card to one foundation if legal."""
-        if suit not in self.foundations or self.waste.is_empty():
+        if self.waste.is_empty():
             return False
         card = self.waste.peek()
-        if not self.can_place_on_foundation(card, suit):
+        if not self.can_place_on_foundation(card, foundation_index):
             return False
 
         self._record_turn()
         moved = self.waste.pop()
         moved.face_up = True
-        self.foundations[suit].push(moved)
+        self.foundations[foundation_index].push(moved)
         self._commit_move(score_delta=10)
         return True
 
@@ -216,18 +221,18 @@ class KlondikeGame:
         self._commit_move(score_delta=5)
         return True
 
-    def move_tableau_to_foundation(self, source_column: int) -> bool:
-        """Move top visible card from tableau column to matching foundation if legal."""
+    def move_tableau_to_foundation(self, source_column: int, foundation_index: int) -> bool:
+        """Move top visible card from tableau column to a foundation slot if legal."""
         if not (0 <= source_column < 7):
             return False
         card = self.tableau[source_column].top_visible()
-        if card is None or not self.can_place_on_foundation(card, card.suit):
+        if card is None or not self.can_place_on_foundation(card, foundation_index):
             return False
 
         self._record_turn()
         moved = self.tableau[source_column].remove_visible_count(1)[0]
         moved.face_up = True
-        self.foundations[moved.suit].push(moved)
+        self.foundations[foundation_index].push(moved)
         flipped = self._auto_flip_if_needed(source_column)
         self._commit_move(score_delta=10 if flipped else 8)
         return True
@@ -256,11 +261,11 @@ class KlondikeGame:
         self._commit_move(score_delta=6 if flipped else 3)
         return True
 
-    def move_foundation_to_tableau(self, suit: str, target_column: int) -> bool:
+    def move_foundation_to_tableau(self, foundation_index: int, target_column: int) -> bool:
         """Move top foundation card back to tableau if legal."""
-        if suit not in self.foundations or not (0 <= target_column < 7):
+        if not (0 <= foundation_index < len(self.foundations)) or not (0 <= target_column < 7):
             return False
-        foundation = self.foundations[suit]
+        foundation = self.foundations[foundation_index]
         if foundation.is_empty():
             return False
 
@@ -290,10 +295,15 @@ class KlondikeGame:
 
     def validate_foundation_state(self) -> bool:
         """Return True when each foundation stack is same-suit and strictly ascending."""
-        for suit, stack in self.foundations.items():
+        for stack in self.foundations:
             expected = 1
+            suit = None
             for card in stack.to_list():
-                if card.suit != suit or card.rank != expected or not card.face_up:
+                if not card.face_up:
+                    return False
+                if suit is None:
+                    suit = card.suit
+                if card.suit != suit or card.rank != expected:
                     return False
                 expected += 1
         return True
@@ -336,7 +346,7 @@ class KlondikeGame:
 
     def is_won(self) -> bool:
         """Return True when all foundations are complete from Ace to King."""
-        return all(stack.size() == 13 for stack in self.foundations.values())
+        return all(stack.size() == 13 for stack in self.foundations)
 
     def finalize_result(self) -> list[dict[str, Any]]:
         """Persist current game result into ranking storage and return leaderboard."""
@@ -352,12 +362,12 @@ class KlondikeGame:
         """Return compact symbols for stock, waste, and foundation top cards."""
         stock_text = "XX" if not self.stock.is_empty() else "--"
         waste_text = self.waste.peek().to_symbol() if not self.waste.is_empty() else "--"
-        foundation_text = {
-            suit: (stack.peek().to_symbol() if not stack.is_empty() else "--")
-            for suit, stack in self.foundations.items()
-        }
+        foundation_text = [
+            stack.peek().to_symbol() if not stack.is_empty() else "--"
+            for stack in self.foundations
+        ]
         result = {"stock": stock_text, "waste": waste_text}
-        result.update({f"foundation_{suit}": text for suit, text in foundation_text.items()})
+        result.update({f"foundation_{index + 1}": text for index, text in enumerate(foundation_text)})
         return result
 
     def tableau_view(self) -> list[str]:
