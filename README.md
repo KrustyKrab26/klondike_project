@@ -46,7 +46,15 @@ python main.py
 - Tính điểm và bảng xếp hạng có sắp xếp.
 - Lưu xếp hạng tại `data/rankings.json` sau khi bấm Save Result.
 
-## 5. Cách thao tác trên giao diện mới
+## 5. Cách tính điểm:
+ - Rút từ Stock sang Waste +5, nếu Stock rỗng và chỉ quay Waste về Stock thì +0 (thao tác đơn giản).
+ - Rút từ Waste về Foundation +5.
+ - Rút từ Waste về Tableau +5.
+ - Rút từ Tableau về Foundation +10 nếu lật bài, còn không +8.
+ - Rút từ Tableau về Tableau: +6 nếu lật bài, còn không +3.
+ - Rút từ Foundation về Tableau: -15 (thao tác này làm game dễ đi, -15 điểm như một cách tăng tính hấp dẫn của trò chơi).
+
+## 5. Cách thao tác
 
 - Click vào Stock để rút 1 lá sang Waste (khi hết Stock sẽ tự quay Waste về Stock).
 - Kéo-thả trực tiếp để di chuyển bài: giữ chuột ở lá nguồn rồi kéo sang lá/cột đích.
