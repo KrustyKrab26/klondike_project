@@ -1,4 +1,4 @@
-<video src="https://github.com/user-attachments/assets/e4d6abf1-1300-460b-84e7-74237eac6b27" controls="controls" width="100%"></video>
+<video src="https://github.com/user-attachments/assets/139f1bd2-d35c-4a90-98df-4600d09e5e36" controls="controls" width="100%"></video>
 
 # Klondike Project (Python + Tkinter)
 
@@ -56,7 +56,7 @@ python main.py
  - Rút từ Tableau về Tableau: +6 nếu lật bài, còn không +3.
  - Rút từ Foundation về Tableau: -15 (thao tác này làm game dễ đi, -15 điểm như một cách tăng tính hấp dẫn của trò chơi).
 
-## 5. Cách thao tác
+## 6. Cách thao tác
 
 - Click vào Stock để rút 1 lá sang Waste (khi hết Stock sẽ tự quay Waste về Stock).
 - Kéo-thả trực tiếp để di chuyển bài: giữ chuột ở lá nguồn rồi kéo sang lá/cột đích.
@@ -65,7 +65,7 @@ python main.py
 - Nhấn `F11` để bật/tắt chế độ toàn màn hình.
 - Bấm nút `Toggle Ranking` để ẩn/hiện bảng xếp hạng và mở rộng vùng chơi khi cần.
 
-## 6. Lưu ý
+## 7. Lưu ý
 - Nếu cần xóa môi trường:
 ```powershell
 conda remove -n klondike-conda --all -y
