@@ -1,3 +1,5 @@
+https://github.com/user-attachments/assets/139f1bd2-d35c-4a90-98df-4600d09e5e36
+
 # Klondike Project (Python + Tkinter)
 
 Project Klondike Solitaire được viết bằng Python với GUI Tkinter.
