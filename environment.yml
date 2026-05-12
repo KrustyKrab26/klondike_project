@@ -3,5 +3,6 @@ channels:
   - defaults
 dependencies:
   - python=3.11
-  - tk
   - pip
+  - pip:
+      - dearpygui>=2,<3

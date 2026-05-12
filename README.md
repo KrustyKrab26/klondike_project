@@ -1,8 +1,8 @@
 <video src="https://github.com/user-attachments/assets/139f1bd2-d35c-4a90-98df-4600d09e5e36" controls="controls" width="100%"></video>
 
-# Klondike Project (Python + Tkinter)
+# Klondike Project (Python + DearPyGui)
 
-Project Klondike Solitaire được viết bằng Python với GUI Tkinter.
+Project Klondike Solitaire được viết bằng Python với GUI DearPyGui.
 
 ## 1. Yêu cầu
 
@@ -26,8 +26,9 @@ conda activate klondike-conda
 Hoặc tạo thủ công:
 
 ```powershell
-conda create -n klondike-conda python=3.11 tk -y
+conda create -n klondike-conda python=3.11 -y
 conda activate klondike-conda
+pip install "dearpygui>=2,<3"
 ```
 
 ## 3. Chạy game
@@ -59,11 +60,10 @@ python main.py
 ## 6. Cách thao tác
 
 - Click vào Stock để rút 1 lá sang Waste (khi hết Stock sẽ tự quay Waste về Stock).
-- Kéo-thả trực tiếp để di chuyển bài: giữ chuột ở lá nguồn rồi kéo sang lá/cột đích.
+- Kéo-thả trực tiếp để di chuyển bài: giữ chuột ở lá nguồn rồi kéo sang lá/cột đích. GUI DearPyGui sẽ hiển thị viền/vùng xem trước khi kéo.
 - Click lại đúng lá nguồn đang chọn để bỏ chọn.
 - Dùng Undo/Redo để hoàn tác hoặc làm lại.
-- Nhấn `F11` để bật/tắt chế độ toàn màn hình.
-- Bấm nút `Toggle Ranking` để ẩn/hiện bảng xếp hạng và mở rộng vùng chơi khi cần.
+- Bật/tắt checkbox `Ranking` để ẩn/hiện bảng xếp hạng và mở rộng vùng chơi khi cần.
 
 ## 7. Lưu ý
 - Nếu cần xóa môi trường:
