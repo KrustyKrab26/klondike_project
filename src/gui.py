@@ -43,6 +43,7 @@ class KlondikeApp:
     def __init__(self) -> None:
         """Create game model, DearPyGui widgets, and initial board rendering."""
         self.game = KlondikeGame()
+        self.app_started = False
         self.fullscreen_enabled = False
         self.ranking_visible = True
 
@@ -74,8 +75,11 @@ class KlondikeApp:
         self.back_uv_max: tuple[float, float] = (1.0, 1.0)
 
         self.main_window_tag = "main_window"
+        self.welcome_window_tag = "welcome_window"
+        self.welcome_panel_tag = "welcome_panel"
+        self.welcome_player_tag = "welcome_player_input"
+        self.welcome_status_tag = "welcome_status_text"
         self.board_tag = "board_drawlist"
-        self.player_tag = "player_input"
         self.status_tag = "status_text"
         self.score_tag = "score_text"
         self.moves_tag = "moves_text"
@@ -165,6 +169,7 @@ class KlondikeApp:
             no_move=True,
             no_collapse=True,
             no_close=True,
+            show=False,
         ):
             with dpg.group(horizontal=True):
                 title_tag = dpg.add_text("Klondike Solitaire")
@@ -172,8 +177,6 @@ class KlondikeApp:
                     dpg.bind_item_font(title_tag, self.large_font)
 
                 dpg.add_spacer(width=18)
-                dpg.add_text("Player")
-                dpg.add_input_text(tag=self.player_tag, default_value="Player", width=190)
                 dpg.add_button(label="New Game", callback=self.start_new_game)
                 dpg.add_button(label="Undo", callback=self.undo_move)
                 dpg.add_button(label="Redo", callback=self.redo_move)
@@ -202,7 +205,42 @@ class KlondikeApp:
             with dpg.child_window(tag=self.ranking_holder_tag, height=self.ranking_height, border=True):
                 dpg.add_text("Ranking")
 
-        dpg.set_primary_window(self.main_window_tag, True)
+        with dpg.window(
+            tag=self.welcome_window_tag,
+            label="Welcome",
+            no_title_bar=True,
+            no_move=True,
+            no_resize=True,
+            no_collapse=True,
+            no_close=True,
+        ):
+            dpg.add_spacer(height=110)
+            with dpg.child_window(tag=self.welcome_panel_tag, width=430, height=270, border=True):
+                title_tag = dpg.add_text("Klondike Solitaire")
+                if self.large_font is not None:
+                    dpg.bind_item_font(title_tag, self.large_font)
+
+                dpg.add_spacer(height=12)
+                dpg.add_text("Player name")
+                dpg.add_input_text(
+                    tag=self.welcome_player_tag,
+                    default_value="Player",
+                    width=-1,
+                    on_enter=True,
+                    callback=self.start_from_welcome,
+                )
+                dpg.add_spacer(height=14)
+                with dpg.group(horizontal=True):
+                    dpg.add_button(label="Start", width=130, callback=self.start_from_welcome)
+                    dpg.add_button(label="Quit", width=130, callback=self.quit_app)
+                dpg.add_spacer(height=10)
+                dpg.add_text(
+                    "Enter your name to begin.",
+                    tag=self.welcome_status_tag,
+                    color=(179, 222, 207, 255),
+                )
+
+        dpg.set_primary_window(self.welcome_window_tag, True)
 
     def _build_handlers(self) -> None:
         """Register global mouse and keyboard handlers."""
@@ -281,6 +319,23 @@ class KlondikeApp:
     def _board_size(self) -> tuple[int, int]:
         """Return the currently configured board size."""
         return self.board_width, self.board_height
+
+    def _resize_welcome_screen(self) -> None:
+        """Keep the welcome panel centered in the viewport."""
+        client_width = max(self.MIN_BOARD_WIDTH, dpg.get_viewport_client_width() or 1120)
+        client_height = max(560, dpg.get_viewport_client_height() or 900)
+        panel_width = min(430, client_width - 48)
+        panel_height = 270
+
+        dpg.configure_item(self.welcome_window_tag, width=client_width, height=client_height)
+        dpg.configure_item(self.welcome_panel_tag, width=panel_width, height=panel_height)
+        dpg.set_item_pos(
+            self.welcome_panel_tag,
+            (
+                max(24, client_width // 2 - panel_width // 2),
+                max(40, client_height // 2 - panel_height // 2),
+            ),
+        )
 
     def _resize_for_viewport(self) -> None:
         """Keep board height balanced with optional ranking space."""
@@ -1181,14 +1236,35 @@ class KlondikeApp:
         self.refresh_board()
 
     def start_new_game(self, *_args: Any) -> None:
-        """Start a fresh game and apply current player name."""
-        self.game.set_player_name(dpg.get_value(self.player_tag))
+        """Start a fresh game for the current player."""
         self.game.new_game()
         self._clear_selection()
         self._clear_drag_state()
         self._set_status("Started a new game")
         self.refresh_board()
         self._tick_clock(force=True)
+
+    def start_from_welcome(self, *_args: Any) -> None:
+        """Start the first game from the welcome screen."""
+        player_name = str(dpg.get_value(self.welcome_player_tag)).strip()
+        if not player_name:
+            dpg.set_value(self.welcome_status_tag, "Please enter a player name.")
+            dpg.configure_item(self.welcome_status_tag, color=self.ERROR)
+            return
+
+        self.game.set_player_name(player_name)
+        self.app_started = True
+        dpg.configure_item(self.welcome_window_tag, show=False)
+        dpg.configure_item(self.main_window_tag, show=True)
+        dpg.set_primary_window(self.welcome_window_tag, False)
+        dpg.set_primary_window(self.main_window_tag, True)
+        self.last_client_size = (0, 0)
+        self.start_new_game()
+        self._resize_for_viewport()
+
+    def quit_app(self, *_args: Any) -> None:
+        """Close the DearPyGui application from the welcome screen."""
+        dpg.stop_dearpygui()
 
     def undo_move(self, *_args: Any) -> None:
         """Undo last move when history is available."""
@@ -1231,7 +1307,6 @@ class KlondikeApp:
 
     def save_result(self, *_args: Any) -> None:
         """Save current run into ranking and refresh the table."""
-        self.game.set_player_name(dpg.get_value(self.player_tag))
         entries = self.game.finalize_result()
         self.refresh_ranking_table(entries)
         won_text = "won" if self.game.is_won() else "not won"
@@ -1240,6 +1315,10 @@ class KlondikeApp:
 
     def frame_update(self) -> None:
         """Run lightweight per-frame updates."""
+        if not self.app_started:
+            self._resize_welcome_screen()
+            return
+
         self._resize_for_viewport()
         self._update_mouse_drag_state()
         self._tick_clock()
