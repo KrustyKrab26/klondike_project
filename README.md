@@ -1,4 +1,4 @@
-<video src="https://github.com/user-attachments/assets/139f1bd2-d35c-4a90-98df-4600d09e5e36" controls="controls" width="100%"></video>
+<video src="https://github.com/user-attachments/assets/59fef4a1-ec4e-4b12-9315-00c619d6e2cc" controls="controls" width="100%"></video>
 
 # Klondike Project (Python + DearPyGui)
 
