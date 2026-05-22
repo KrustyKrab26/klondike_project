@@ -216,7 +216,7 @@ class KlondikeApp:
         ):
             dpg.add_spacer(height=110)
             with dpg.child_window(tag=self.welcome_panel_tag, width=430, height=270, border=True):
-                title_tag = dpg.add_text("Klondike Solitaire")
+                title_tag = dpg.add_text("Klondike")
                 if self.large_font is not None:
                     dpg.bind_item_font(title_tag, self.large_font)
 
@@ -1342,7 +1342,7 @@ class KlondikeApp:
 def run_app() -> None:
     """Create the DearPyGui viewport and run the application loop."""
     dpg.create_context()
-    dpg.create_viewport(title="Klondike Solitaire - DearPyGui", width=1120, height=900, min_width=760, min_height=560)
+    dpg.create_viewport(title="Klondike", width=1120, height=900, min_width=760, min_height=560)
     app = KlondikeApp()
     dpg.setup_dearpygui()
     dpg.show_viewport()
