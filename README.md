@@ -65,7 +65,12 @@ python main.py
 - Dùng Undo/Redo để hoàn tác hoặc làm lại.
 - Bật/tắt checkbox `Ranking` để ẩn/hiện bảng xếp hạng và mở rộng vùng chơi khi cần.
 
-## 7. Lưu ý
+## 7. Nguồn tham khảo:
+- DearPyGui: https://github.com/hoffstadt/DearPyGui
+- Texture lá bài: https://www.kaggle.com/datasets/avinashtare/complete-52-card-deck-dataset-for-card-game
+- Game Klondike online: https://www.solitaire-klondike.com/klondike.html
+
+## 8. Lưu ý
 - Nếu cần xóa môi trường:
 ```powershell
 conda remove -n klondike-conda --all -y
